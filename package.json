@@ -1,0 +1,15 @@
+{
+  "name": "dlab-fourcuts",
+  "version": "2.0.0",
+  "private": true,
+  "description": "디랩네컷 — micro:bit 에어마우스로 찍는 GGF 2026 네컷 포토부스",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  },
+  "engines": { "node": ">=18" }
+}
