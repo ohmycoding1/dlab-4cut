@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>디랩네컷 · GGF 2026</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body data-stage="idle">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="dlab-mark" viewBox="0 0 765 198">
+      <g transform="translate(0,-32)">
+        <path d="M8 46 H154 V76 H757 V220 H118 V188 H8 Z" fill="none" stroke="currentColor" stroke-width="16" stroke-linejoin="miter"/>
+        <g fill="currentColor">
+          <text x="36" y="158.4" font-family="PoppinsL" font-weight="600" font-size="118">D</text>
+          <circle cx="141" cy="133" r="9.5"/>
+          <text x="168" y="189.4" font-family="PoppinsL" font-weight="600" font-size="118">L</text>
+          <path d="M232 189.4 L276 106.6 L320 189.4 L301.3 189.4 L276 141.8 L250.7 189.4 Z"/>
+          <text x="330" y="189.4" font-family="PoppinsL" font-weight="600" font-size="118">B</text>
+          <rect x="428" y="106.6" width="10" height="82.8"/>
+          <text x="462" y="171.1" font-family="PoppinsL" font-weight="600" font-size="66">CODING</text>
+        </g>
+      </g>
+    </symbol>
+  </svg>
+
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <svg class="logo" role="img" aria-label="D·LAB CODING"><use href="#dlab-mark"/></svg>
+        <div class="brand-text">
+          <h1>디랩네컷</h1>
+          <span>GGF 2026 · 오늘은 내가 주인공!</span>
+        </div>
+      </div>
+      <div class="status">
+        <button class="chip" id="cam-chip" data-mb><i></i><span>카메라 대기</span></button>
+        <button class="chip" id="ble-chip" data-mb><i></i><span>micro:bit 미연결</span></button>
+        <button class="icon-btn" id="settings-btn" aria-label="설정">⚙</button>
+      </div>
+    </header>
+
+    <main class="board">
+      <!-- 촬영 무대 -->
+      <section class="stage">
+        <div class="camera" id="camera">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="guide" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <div class="placeholder" id="placeholder">
+            <div class="ph-icon">📷</div>
+            <p>카메라를 켜면 촬영 준비 완료!</p>
+            <button class="btn primary" id="camera-btn">카메라 켜기</button>
+          </div>
+          <div class="count" id="count"></div>
+          <div class="shot-badge" id="shot-badge"></div>
+          <div class="flash" id="flash"></div>
+        </div>
+        <div class="stage-hint" id="stage-hint">
+          <span class="key">기울이기</span> 커서 이동 <span class="sep"></span>
+          <span class="key a">A</span> 선택 <span class="sep"></span>
+          <span class="key b">B</span> 뒤로
+        </div>
+      </section>
+
+      <!-- 오른쪽: 프레임 + 미리보기 + 시작 -->
+      <aside class="side">
+        <div class="side-head">
+          <span class="eyebrow">STEP 1</span>
+          <h2>프레임을 골라요</h2>
+        </div>
+        <div class="frames" id="frames"></div>
+
+        <div class="preview-wrap">
+          <div class="strip" id="strip">
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="strip-foot">
+              <svg class="strip-logo"><use href="#dlab-mark"/></svg>
+              <span id="strip-date"></span>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn start" id="start-btn" disabled>
+          <span class="key a">A</span>
+          <span>네컷 촬영 시작</span>
+        </button>
+        <p class="shoot-msg" id="shoot-msg">포즈를 바꿔 가며 4번 찍어요</p>
+      </aside>
+
+      <!-- 결과 -->
+      <section class="result" id="result">
+        <div class="result-photo">
+          <img id="final-img" alt="완성된 디랩네컷">
+        </div>
+        <div class="result-info">
+          <span class="eyebrow">YOUR FOUR CUTS</span>
+          <h2>네컷 완성! 🎉</h2>
+          <p class="lead">휴대폰 카메라로 QR을 찍으면<br>사진을 바로 저장할 수 있어요.</p>
+          <div class="qr" id="qr"><span>QR 만드는 중…</span></div>
+          <p class="qr-note" id="qr-note"></p>
+          <div class="result-btns">
+            <button class="btn ghost" id="download-btn">💾 PC에 저장</button>
+            <button class="btn ghost" id="retry-btn">↻ 다시 찍기</button>
+            <button class="btn primary" id="home-btn"><span class="key b">B</span> 처음으로</button>
+          </div>
+          <p class="auto-home" id="auto-home"></p>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+  </div>
+
+  <!-- micro:bit 커서 -->
+  <div class="mb-cursor" id="cursor" aria-hidden="true"><i></i></div>
+
+  <!-- 운영자 설정 -->
+  <dialog class="settings" id="settings">
+    <form method="dialog" class="settings-inner">
+      <header>
+        <h2>운영 설정</h2>
+        <button class="icon-btn" value="close" aria-label="닫기">✕</button>
+      </header>
+
+      <section>
+        <h3>micro:bit 리모컨</h3>
+        <p class="ble-state" id="ble-state">연결 안 됨</p>
+        <div class="row">
+          <button type="button" class="btn primary" id="ble-btn">ᛒ 블루투스 연결</button>
+          <button type="button" class="btn ghost" id="calib-btn">⊙ 지금 자세를 기준으로</button>
+        </div>
+        <label class="field">커서 속도 <input type="range" id="sens" min="1" max="5" step="1"><output id="sens-out"></output></label>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="inv-x"> 좌우 반전</label>
+          <label class="check"><input type="checkbox" id="inv-y"> 상하 반전</label>
+          <label class="check"><input type="checkbox" id="sim"> 가상 micro:bit (방향키·A·B)</label>
+        </div>
+        <p class="help">micro:bit에 <code>firmware/dlab-fourcuts.ts</code>를 넣고(MakeCode → 프로젝트 설정 → <b>No Pairing Required</b>) 연결하세요. 연결이 끊기면 자동으로 다시 붙어요.</p>
+      </section>
+
+      <section>
+        <h3>촬영</h3>
+        <label class="field">카메라 <select id="cam-select"><option value="">기본 카메라</option></select></label>
+        <div class="row">
+          <label class="field">카운트다운
+            <select id="count-sec"><option value="3">3초</option><option value="5">5초</option><option value="7">7초</option></select>
+          </label>
+          <label class="check"><input type="checkbox" id="sound"> 효과음</label>
+          <label class="check"><input type="checkbox" id="mirror"> 거울 모드</label>
+        </div>
+        <div class="row">
+          <button type="button" class="btn ghost" id="fs-btn">⛶ 전체 화면</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>QR 공유</h3>
+        <p class="help" id="share-info">확인 중…</p>
+      </section>
+    </form>
+  </dialog>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
