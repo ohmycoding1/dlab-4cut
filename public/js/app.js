@@ -5,10 +5,17 @@ const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ───────── 설정(운영자 PC에 저장) ─────────
-const DEFAULTS = { frame: 'navy', sensitivity: 3, invertX: false, invertY: false, countSec: 3, sound: true, mirror: true, camId: '', simulate: false };
+const DEFAULTS = { apiBase: '', frame: 'navy', sensitivity: 3, invertX: false, invertY: false, countSec: 3, sound: true, mirror: true, camId: '', simulate: false };
 const settings = { ...DEFAULTS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('dlab4cut') || '{}')); } catch { /* 저장소 없음 */ }
 const save = () => { try { localStorage.setItem('dlab4cut', JSON.stringify(settings)); } catch { /* 무시 */ } };
+
+// 사진 서버 주소: ?api=https://... > 설정값 > 같은 주소(npm start 로 실행한 경우)
+// GitHub Pages 같은 정적 호스팅에서는 서버가 없으므로 QR 대신 PC 저장만 사용
+const apiParam = new URLSearchParams(location.search).get('api');
+if (apiParam !== null) { settings.apiBase = apiParam; save(); }
+const apiBase = () => (settings.apiBase || '').trim().replace(/\/+$/, '');
+let serverOK = null;   // null=확인 중, true/false
 
 // ───────── 프레임 ─────────
 const FRAMES = [
@@ -295,10 +302,15 @@ function showResult() {
 
 async function upload() {
   const blob = resultBlob;
+  if (serverOK === false) {
+    $('qr').innerHTML = '<span>QR 전달은 사진 서버가 필요해요.<br><b>PC에 저장</b>을 이용해 주세요.</span>';
+    $('qr-note').textContent = '운영자: ⚙ 설정 → 사진 서버 주소를 지정하면 QR이 켜져요';
+    return;
+  }
   $('qr').innerHTML = '<span>QR 만드는 중…</span>';
   $('qr-note').textContent = '';
   try {
-    const resp = await fetch('/api/photos', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, signal: AbortSignal.timeout(20000) });
+    const resp = await fetch(`${apiBase()}/api/photos`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, signal: AbortSignal.timeout(20000) });
     if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || `서버 응답 ${resp.status}`);
     const data = await resp.json();
     if (blob !== resultBlob) return; // 그사이 다음 손님으로 넘어감
@@ -451,12 +463,23 @@ applyFrame();
 renderFrames();
 setStage('idle');
 
-fetch('/api/health').then(r => r.json()).then(h => {
+function checkServer() {
+  serverOK = null;
+  $('share-info').textContent = '확인 중…';
+  fetch(`${apiBase()}/api/health`, { signal: AbortSignal.timeout(6000) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(h => {
+  serverOK = true;
   const local = /^http:\/\/(\d+\.){3}\d+/.test(h.shareBase);
   $('share-info').innerHTML = `QR 주소: <code>${h.shareBase}</code><br>` + (local
     ? '휴대폰이 <b>이 노트북과 같은 와이파이</b>에 있어야 열려요. 행사장 와이파이가 기기 간 통신을 막으면 <code>PUBLIC_BASE_URL</code>로 공개 주소를 지정하세요.'
     : '이 주소로 휴대폰에서 사진을 받아요.');
-}).catch(() => { $('share-info').textContent = '서버에 연결할 수 없어요. npm start 로 실행했는지 확인하세요.'; });
+}).catch(() => {
+  serverOK = false;
+  $('share-info').innerHTML = '사진 서버에 연결할 수 없어요. 촬영·PC 저장은 되지만 <b>QR 전달은 꺼져요</b>.<br>노트북에서 <code>npm start</code>로 실행하거나, 아래에 서버 주소를 넣으세요.';
+});
+}
+checkServer();
+$('api-base').value = settings.apiBase;
+$('api-base').addEventListener('change', () => { settings.apiBase = $('api-base').value.trim(); save(); checkServer(); });
 
 // 이미 카메라 권한이 있으면 바로 켜기, 이미 허용한 micro:bit 는 자동 재연결
 navigator.permissions?.query({ name: 'camera' }).then(p => { if (p.state === 'granted') openCamera(); }).catch(() => {});

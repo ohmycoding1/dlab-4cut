@@ -1,4 +1,4 @@
-@font-face { font-family: 'PoppinsL'; font-weight: 600; src: url('/fonts/poppins-600.woff') format('woff'); font-display: block; }
+@font-face { font-family: 'PoppinsL'; font-weight: 600; src: url('../fonts/poppins-600.woff') format('woff'); font-display: block; }
 
 :root {
   --bg: #0f131b;
@@ -214,6 +214,7 @@ body[data-stage="result"] .stage, body[data-stage="result"] .side { display: non
 .settings .btn { padding: 11px 16px; font-size: 14px; }
 .field { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
 .field select, .field input[type=range] { flex: 1; min-width: 120px; }
+input[type=url] { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); user-select: text; }
 select { font: inherit; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); }
 .check { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
 input[type=checkbox], input[type=range] { accent-color: var(--yellow); }

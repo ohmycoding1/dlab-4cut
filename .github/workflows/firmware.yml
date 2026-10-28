@@ -1,0 +1,37 @@
+name: micro:bit 펌웨어 빌드
+
+on:
+  push:
+    paths: ['firmware/codal/**', '.github/workflows/firmware.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 툴체인 설치
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib cmake ninja-build
+
+      - name: CODAL(micro:bit V2) 받기
+        run: |
+          git clone --depth 1 https://github.com/lancaster-university/microbit-v2-samples codal
+          rm -rf codal/source/*
+          cp firmware/codal/main.cpp codal/source/main.cpp
+          cp firmware/codal/codal.json codal/codal.json
+
+      - name: 빌드
+        working-directory: codal
+        run: python3 build.py
+
+      - name: hex 정리
+        run: |
+          mkdir -p out
+          cp codal/MICROBIT.hex out/dlab-fourcuts-v2.hex
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dlab-fourcuts-microbit-hex
+          path: out/dlab-fourcuts-v2.hex
