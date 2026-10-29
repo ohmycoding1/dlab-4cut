@@ -20,6 +20,16 @@ npm start
 
 ## micro:bit 준비
 
+### 방법 A — hex 바로 넣기 (micro:bit V2)
+
+1. GitHub → **Actions** → **micro:bit 펌웨어 빌드** → 최근 실행 → 아래 **Artifacts**의 `dlab-fourcuts-microbit-hex`를 내려받습니다.
+2. 압축을 풀어 나온 `dlab-fourcuts-v2.hex`를 USB로 연결한 `MICROBIT` 드라이브에 끌어다 놓습니다.
+3. LED에 카메라 모양이 뜨면 준비 완료입니다. 페어링 없이 바로 연결됩니다.
+
+펌웨어 소스는 [`firmware/codal/`](firmware/codal/)에 있습니다(CODAL C++, V2 전용). 소스를 고쳐 푸시하면 자동으로 다시 빌드되고, Actions 탭에서 **Run workflow**로 수동 실행할 수도 있습니다.
+
+### 방법 B — MakeCode로 만들기 (V1·V2 모두)
+
 1. [makecode.microbit.org](https://makecode.microbit.org)에서 새 프로젝트를 만들고, 확장 프로그램에서 **bluetooth**를 추가합니다.
 2. **JavaScript** 탭에 [`firmware/dlab-fourcuts.ts`](firmware/dlab-fourcuts.ts)를 붙여넣습니다.
 3. ⚙ **프로젝트 설정** → **No Pairing Required: Anyone can connect via Bluetooth**를 선택합니다. Windows에서 페어링 문제를 피하려면 꼭 필요합니다.
@@ -56,6 +66,18 @@ npm start
 | `PUBLIC_BASE_URL` | (자동) | QR에 넣을 주소. 예: `https://fourcuts.dlab.kr` |
 | `TRUST_PROXY` | (꺼짐) | HTTPS 리버스 프록시 뒤라면 `1` |
 | `UPLOADS_PER_MIN` | `20` | IP당 분당 업로드 제한 |
+| `CORS_ORIGIN` | (꺼짐) | 다른 주소의 화면(예: GitHub Pages)에서 업로드 허용. 쉼표로 여러 개 |
+
+## GitHub Pages로 쓰기
+
+`main`에 푸시하면 `public/`이 **https://ohmycoding1.github.io/dlab-4cut/**에 배포됩니다(처음 한 번은 저장소 **Settings → Pages → Source**를 **GitHub Actions**로 바꿔야 합니다).
+
+- Pages는 정적 호스팅이라 **카메라 촬영·micro:bit·합성·PC 저장은 되지만, QR 사진 전달은 꺼집니다**(사진을 보관할 서버가 없음). 결과 화면에 "PC에 저장을 이용해 주세요"라고 안내됩니다.
+- QR까지 쓰려면 사진 서버(`npm start`)를 따로 띄우고 연결합니다.
+  - 서버: `CORS_ORIGIN=https://ohmycoding1.github.io PUBLIC_BASE_URL=https://서버주소 npm start`
+  - 화면: `https://ohmycoding1.github.io/dlab-4cut/?api=https://서버주소` (또는 ⚙ → 사진 서버 주소)
+  - Pages는 HTTPS라서 서버도 **HTTPS**여야 합니다(브라우저가 HTTP 요청을 막음).
+- 행사장에서 노트북 한 대로 운영한다면, Pages보다 노트북에서 `npm start`로 띄우는 쪽이 가장 간단합니다. 같은 와이파이 휴대폰으로 QR이 바로 열립니다.
 
 ## 행사 전 체크리스트
 
@@ -74,5 +96,7 @@ public/index.html      화면
 public/css/app.css     디자인
 public/js/app.js       촬영 흐름·합성·업로드
 public/js/microbit.js  BLE 연결 + 에어 마우스 커서
-firmware/              micro:bit MakeCode 코드
+firmware/codal/        micro:bit V2 펌웨어(C++) — Actions가 hex로 빌드
+firmware/*.ts          같은 기능의 MakeCode 코드
+.github/workflows/     펌웨어 빌드 · Pages 배포
 ```

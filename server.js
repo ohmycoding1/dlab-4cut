@@ -28,6 +28,19 @@ app.use((_req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   next();
 });
+// GitHub Pages 등 다른 주소의 화면에서 이 서버로 업로드할 때: CORS_ORIGIN=https://ohmycoding1.github.io
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+app.use('/api', (req, res, next) => {
+  const origin = req.get('origin');
+  if (origin && CORS_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, file) { if (file.endsWith('.html')) res.setHeader('Cache-Control', 'no-store'); },
 }));
