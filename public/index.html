@@ -152,13 +152,16 @@
           <button type="button" class="btn primary" id="ble-btn">ᛒ 블루투스 연결</button>
           <button type="button" class="btn ghost" id="calib-btn">⊙ 지금 자세를 기준으로</button>
         </div>
+        <div class="row">
+          <button type="button" class="btn ghost" id="ble-all-btn">🔍 목록에 없으면: 모든 블루투스 기기에서 찾기</button>
+        </div>
         <label class="field">커서 속도 <input type="range" id="sens" min="1" max="5" step="1"><output id="sens-out"></output></label>
         <div class="row">
           <label class="check"><input type="checkbox" id="inv-x"> 좌우 반전</label>
           <label class="check"><input type="checkbox" id="inv-y"> 상하 반전</label>
           <label class="check"><input type="checkbox" id="sim"> 가상 micro:bit (방향키·A·B)</label>
         </div>
-        <p class="help">micro:bit에 <code>firmware/dlab-fourcuts.ts</code>를 넣고(MakeCode → 프로젝트 설정 → <b>No Pairing Required</b>) 연결하세요. 연결이 끊기면 자동으로 다시 붙어요.</p>
+        <p class="help">micro:bit LED에 <b>카메라 모양</b>이 떠 있어야 목록에 나와요(펌웨어가 들어간 상태). 휴대폰 앱·다른 탭 등 다른 곳에 이미 연결돼 있으면 안 보여요. 연결이 끊기면 자동으로 다시 붙어요.</p>
       </section>
 
       <section>
