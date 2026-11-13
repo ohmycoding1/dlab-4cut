@@ -109,8 +109,10 @@ body.mirror .intro-bg { transform: scaleX(-1); }
   background: var(--yellow); color: var(--navy); font-size: clamp(18px, 2.8vh, 26px); font-weight: 900;
   box-shadow: 0 16px 50px #ffd54a44; animation: breathe 2.2s ease-in-out infinite;
 }
-.intro-cta .key.a { background: var(--navy); color: var(--yellow); border-color: var(--navy); width: 40px; height: 40px; font-size: 18px; }
+.intro-cta .key.b { background: var(--navy); color: var(--yellow); border-color: var(--navy); width: 40px; height: 40px; font-size: 18px; }
 @keyframes breathe { 50% { transform: scale(1.05); box-shadow: 0 20px 70px #ffd54a66; } }
+.intro-alt .key { width: 26px; min-width: 26px; height: 26px; }
+.intro-alt b { color: var(--ink); }
 .intro-alt { margin: 4px 0 0; color: var(--muted); font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .intro.mb-hover { outline: none !important; transform: none; filter: none; }
 .intro-strips { position: absolute; inset: 0; pointer-events: none; }
@@ -198,6 +200,26 @@ body.mirror .camera video { transform: scaleX(-1); }
   background: #000a; backdrop-filter: blur(6px); padding: 10px 20px; border-radius: 99px; font-weight: 800; font-size: 18px; white-space: nowrap;
 }
 .shot-badge:empty { display: none; }
+/* 컷마다: 흔들기/A+B 기다리는 안내 + 30초 제한 */
+.cue {
+  position: absolute; left: 50%; bottom: 22px; transform: translate(-50%, 16px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 16px; padding: 12px 22px 12px 12px; border-radius: 22px;
+  background: #0b0e14d0; backdrop-filter: blur(8px); border: 1px solid #ffffff22; width: max-content; max-width: calc(100% - 32px);
+  transition: opacity .3s, transform .3s;
+}
+body.cue-on .cue { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.shutter {
+  flex: none; width: clamp(56px, 9vh, 76px); aspect-ratio: 1; border-radius: 50%; font-size: clamp(24px, 4vh, 34px);
+  background: var(--yellow); box-shadow: 0 0 0 5px #ffd54a44; animation: breathe 1.6s ease-in-out infinite;
+}
+.cue-body { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.cue-text { margin: 0; font-size: clamp(16px, 2.6vh, 22px); font-weight: 700; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.cue-text .key { width: 26px; min-width: 26px; height: 26px; }
+.cue-text b { color: #fff; display: inline-flex; align-items: center; gap: 4px; }
+.cue-timer { height: 6px; border-radius: 6px; background: #ffffff22; overflow: hidden; }
+.cue-timer i { display: block; height: 100%; width: 100%; background: var(--yellow); border-radius: 6px; transform-origin: left; transition: transform .25s linear; }
+body.cue-low .cue-timer i { background: var(--coral); }
+.cue-sub { margin: 0; color: #c3c9d4; font-size: 13px; font-weight: 600; }
 .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 .flash.go { animation: flash .35s ease-out; }
 @keyframes flash { from { opacity: .95; } to { opacity: 0; } }
@@ -239,10 +261,10 @@ body.mirror .camera video { transform: scaleX(-1); }
 }
 .btn:active { transform: scale(.97); }
 .btn.primary { background: var(--blue); color: #fff; }
-.btn.primary .key.a { background: #fff; border-color: #fff; color: var(--blue); }
+.btn.primary .key.a, .btn.primary .key.b { background: #fff; border-color: #fff; color: var(--blue); }
 .btn.ghost { background: var(--panel-2); border: 1px solid var(--line); }
 .btn.start { width: 100%; padding: clamp(16px, 2.6vh, 22px); font-size: clamp(18px, 2.6vh, 22px); border-radius: 18px; background: var(--yellow); color: var(--navy); box-shadow: 0 12px 30px #ffd54a33; }
-.btn.start .key.a { background: var(--navy); color: var(--yellow); border-color: var(--navy); }
+.btn.start .key.a, .btn.start .key.b { background: var(--navy); color: var(--yellow); border-color: var(--navy); }
 .shoot-msg { margin: 0; text-align: center; color: var(--muted); font-size: 13px; font-weight: 600; }
 
 /* 하단 조작 안내(화면마다 바뀜) */
@@ -267,6 +289,7 @@ body.mirror .camera video { transform: scaleX(-1); }
   width: 0; height: 0; will-change: transform;
 }
 .mb-cursor.show { display: block; }
+body:not([data-stage="frame"]) > .mb-cursor { opacity: 0; }
 .mb-cursor i {
   position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%;
   border: 4px solid var(--yellow); background: #ffd54a33; box-shadow: 0 0 0 2px #0009, 0 6px 20px #0007;

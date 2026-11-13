@@ -1,5 +1,6 @@
 'use strict';
 import { MicrobitMouse } from './microbit.js';
+import { FIREBASE_SHARE, uploadToFirebase } from './share-config.js';
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -29,6 +30,7 @@ const frame = () => FRAMES.find(f => f.id === settings.frame) || FRAMES[0];
 // 결과물 규격: 1200×3600(2×6인치 @600dpi 비율) / 각 컷 3:2
 const OUT = { w: 1200, h: 3600, pad: 60, top: 70, cw: 1080, ch: 720, gap: 36 };
 const SHOT = { w: 1500, h: 1000 };
+const CUT_LIMIT_SEC = 30;   // 컷마다 '찍기'를 기다리는 최대 시간(지나면 자동 촬영)
 
 let stream = null;
 let stage = 'intro';
@@ -59,11 +61,12 @@ const K = {
   a: '<span class="key a">A</span>', b: '<span class="key b">B</span>',
   k: t => `<span class="key">${t}</span>`, sep: '<span class="sep"></span>',
 };
+const FIRE = `${K.k('흔들기')} 또는 ${K.a}+${K.b}`;
 const HINTS = {
-  intro: `${K.a} 또는 ${K.k('Enter')} 또는 클릭 → 시작`,
-  frame: `${K.k('기울이기')} ${K.k('← →')} 프레임 바꾸기 ${K.sep} ${K.a} ${K.k('Enter')} 촬영 시작 ${K.sep} ${K.b} ${K.k('Esc')} 처음으로`,
-  shooting: `화면을 보고 포즈! 자동으로 4번 찍어요 ${K.sep} ${K.b} ${K.k('Esc')} 취소`,
-  result: `${K.a} ${K.k('Enter')} 처음으로 ${K.sep} ${K.k('R')} 다시 찍기 ${K.sep} ${K.k('S')} PC에 저장`,
+  intro: `${K.b} 시작 ${K.sep} ${FIRE} 바로 촬영 ${K.sep} 키보드 ${K.k('→')} 시작 · ${K.k('Space')} 촬영`,
+  frame: `${K.k('기울이기')} 프레임 고르기 ${K.sep} ${K.a} 이전 ${K.sep} ${K.b} 다음 ${K.sep} ${FIRE} 바로 촬영`,
+  shooting: `${FIRE} 3초 뒤 찰칵 (컷마다 ${CUT_LIMIT_SEC}초 지나면 자동) ${K.sep} ${K.a} 취소 ${K.sep} 키보드 ${K.k('Space')} 찍기 · ${K.k('←')} 취소`,
+  result: `${K.a} 다시 찍기 ${K.sep} ${K.b} 처음으로 ${K.sep} 키보드 ${K.k('←')} ${K.k('→')} · ${K.k('S')} PC에 저장`,
 };
 // 화면 넘김: 현재 화면보다 앞은 왼쪽(past), 뒤는 오른쪽(future)으로 접힘
 function setStage(s) {
@@ -84,12 +87,12 @@ function setStage(s) {
     li.classList.toggle('done', i < idx);
   });
   $('start-btn').disabled = !stream || s !== 'frame';
-  $('shoot-msg').textContent = stream ? '포즈를 바꿔 가며 4번 찍어요' : '카메라를 켜는 중이에요…';
+  $('shoot-msg').innerHTML = stream ? `${FIRE} 하면 바로 촬영 시작!` : '카메라를 켜는 중이에요…';
   $('hint').innerHTML = HINTS[s];
   if (s !== 'result') stopAutoHome();
   if (changed) {
     document.activeElement?.blur?.();
-    const aim = { intro: null, frame: $('start-btn'), result: $('home-btn') }[s];
+    const aim = { intro: null, frame: document.querySelector('.frame.sel') || $('start-btn'), result: $('home-btn') }[s];
     setTimeout(() => { if (stage === s) aim ? mouse.warpTo(aim) : mouse.warpTo($('deck')); }, 850);
   }
 }
@@ -101,7 +104,7 @@ function renderFrames() {
     b.style.setProperty('--c', f.bg);
     b.style.setProperty('--k', f.ink);
     b.innerHTML = `<span class="sw"></span>${f.name}`;
-    b.onclick = () => { if (settings.frame === f.id) { shoot(); return; } pickFrame(f.id); };
+    b.onclick = () => pickFrame(f.id);
     return b;
   }));
 }
@@ -226,23 +229,61 @@ function capture() {
 }
 
 // ───────── 촬영 ─────────
-async function shoot() {
-  if (stage !== 'frame' && stage !== 'result') return;
-  if (!stream) { toast('카메라가 아직 준비되지 않았어요', true); if (stage === 'frame') openCamera(); return; }
+// 컷마다 '찍기' 신호(흔들기 · A+B · 📸 · Space)를 최대 CUT_LIMIT_SEC 초 기다렸다가 3초 카운트다운 후 촬영
+let fireWaiter = null;     // 지금 신호를 기다리는 컷의 resolve
+let preFired = false;      // 다른 화면에서 이미 '찍기' 신호를 보냄 → 첫 컷은 바로 카운트다운
+function waitFire(alive) {
+  if (preFired) { preFired = false; return Promise.resolve('fire'); }
+  return new Promise(resolve => {
+    const end = Date.now() + CUT_LIMIT_SEC * 1000;
+    document.body.classList.add('cue-on');
+    const done = why => { clearInterval(t); fireWaiter = null; document.body.classList.remove('cue-on', 'cue-low'); resolve(why); };
+    const tick = () => {
+      if (!alive()) return done('abort');
+      const left = Math.max(0, end - Date.now());
+      $('cue-time').textContent = Math.ceil(left / 1000);
+      $('cue-bar').style.transform = `scaleX(${left / (CUT_LIMIT_SEC * 1000)})`;
+      document.body.classList.toggle('cue-low', left <= 5000);
+      if (left <= 0) done('timeout');
+    };
+    const t = setInterval(tick, 250);
+    tick();
+    fireWaiter = () => done('fire');
+  });
+}
+// '찍기' 신호 — 어느 화면에서든: 촬영 중이면 이번 컷, 아니면 촬영을 바로 시작
+function fire() {
+  if (dlg.open) return;
+  if (stage === 'shooting') { fireWaiter?.(); return; }
+  if (stage === 'intro' && !stream) { begin(); return; }   // 카메라부터 켜야 함
+  shoot(true);
+}
+
+async function shoot(pre = false) {
+  if (stage === 'shooting') return;
+  if (!stream) { toast('카메라가 아직 준비되지 않았어요', true); openCamera(); return; }
   const id = ++runId;
   clearShots();
+  preFired = pre;
   setStage('shooting');
   const alive = () => id === runId && stage === 'shooting';
   try {
-    // 화면이 넘어오는 동안 "준비!" 안내
     $('shot-badge').textContent = '';
-    $('count').classList.add('on', 'ready');
-    $('count').innerHTML = '<span>포즈 준비!</span>';
-    await sleep(1600);
-    $('count').classList.remove('ready');
+    if (pre) {   // 화면이 넘어오는 동안 "포즈 준비!"
+      $('count').classList.add('on', 'ready');
+      $('count').innerHTML = '<span>포즈 준비!</span>';
+      await sleep(1300);
+      $('count').classList.remove('on', 'ready');
+    } else {
+      await sleep(700);
+    }
     for (let i = 0; i < 4; i++) {
+      if (!alive()) return;
       renderStrip(i);
       $('shot-badge').textContent = `${i + 1} / 4 컷`;
+      mouse.show('dot');
+      const why = await waitFire(alive);
+      if (why === 'abort' || !alive()) return;
       for (let n = settings.countSec; n >= 1; n--) {
         if (!alive()) return;
         $('count').innerHTML = `<span>${n}</span>`;
@@ -260,7 +301,7 @@ async function shoot() {
       mouse.show('heart');
       shots.push(shot);
       renderStrip(i + 1 < 4 ? i + 1 : -1);
-      await sleep(i < 3 ? 1100 : 500);
+      await sleep(i < 3 ? 900 : 500);
     }
     if (!alive()) return;
     $('shot-badge').textContent = '사진 합성 중…';
@@ -271,11 +312,12 @@ async function shoot() {
     toast('촬영 중 문제가 생겼어요: ' + e.message, true);
     if (id === runId) setStage('frame');
   } finally {
-    if (id === runId) { $('count').classList.remove('on'); mouse.show('smile'); }
+    if (id === runId) { $('count').classList.remove('on', 'ready'); document.body.classList.remove('cue-on', 'cue-low'); mouse.show('smile'); }
   }
 }
 function cancelShoot() {
   runId++;
+  fireWaiter?.();
   $('count').classList.remove('on', 'ready');
   clearShots();
   setStage('frame');
@@ -362,25 +404,51 @@ function showResult() {
   startAutoHome();
 }
 
+// QR 을 브라우저에서 직접 그림 (js/vendor/qrcode.js)
+function qrImage(text) {
+  const qr = window.qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount(), m = 2, px = 10, size = (n + m * 2) * px;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#1b2733';
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (qr.isDark(r, k)) ctx.fillRect((k + m) * px, (r + m) * px, px, px);
+  const img = new Image();
+  img.src = c.toDataURL('image/png');
+  img.alt = '사진 받기 QR 코드';
+  return img;
+}
+
+// 1순위: 디랩레포트시스템 Firebase Storage (휴대폰 데이터로도 열림)
+// 2순위: 노트북 사진 서버(npm start, 같은 와이파이)
 async function upload() {
   const blob = resultBlob;
-  if (serverOK === false) {
-    $('qr').innerHTML = '<span>QR 전달은 사진 서버가 필요해요.<br><b>PC에 저장</b>을 이용해 주세요.</span>';
-    $('qr-note').textContent = '운영자: ⚙ 설정 → 사진 서버 주소를 지정하면 QR이 켜져요';
-    return;
-  }
   $('qr').innerHTML = '<span>QR 만드는 중…</span>';
   $('qr-note').textContent = '';
+  let fbError;
   try {
+    const { url } = await uploadToFirebase(blob);
+    window.__lastShareUrl = url;   // 운영 확인용(콘솔에서 마지막 QR 주소 보기)
+    if (blob !== resultBlob) return; // 그사이 다음 손님으로 넘어감
+    $('qr').replaceChildren(qrImage(url));
+    $('qr-note').textContent = `휴대폰 데이터로도 열려요 · 사진은 ${FIREBASE_SHARE.keepDays}일 동안 보관돼요`;
+    return;
+  } catch (e) {
+    fbError = e;
+    console.warn('Firebase 업로드 실패', e);
+  }
+  if (blob !== resultBlob) return;
+  try {
+    if (serverOK !== true) throw fbError;
     const resp = await fetch(`${apiBase()}/api/photos`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, signal: AbortSignal.timeout(20000) });
     if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || `서버 응답 ${resp.status}`);
     const data = await resp.json();
-    if (blob !== resultBlob) return; // 그사이 다음 손님으로 넘어감
-    const img = new Image();
-    img.src = data.qr;
-    img.alt = '사진 받기 QR 코드';
-    $('qr').replaceChildren(img);
-    $('qr-note').textContent = `사진은 ${data.expiresHours}시간 뒤 자동 삭제돼요`;
+    if (blob !== resultBlob) return;
+    $('qr').replaceChildren(qrImage(data.url));
+    $('qr-note').textContent = `같은 와이파이에서 열려요 · 사진은 ${data.expiresHours}시간 뒤 자동 삭제돼요`;
   } catch (e) {
     if (blob !== resultBlob) return;
     const retry = document.createElement('button');
@@ -393,7 +461,7 @@ async function upload() {
     box.style.cssText = 'display:flex;flex-direction:column;gap:12px;align-items:center';
     box.append(msg, retry);
     $('qr').replaceChildren(box);
-    $('qr-note').textContent = `와이파이·서버를 확인해 주세요 (${e.message})`;
+    $('qr-note').textContent = `인터넷 연결을 확인하거나 PC에 저장을 이용해 주세요 (${e.message})`;
   }
 }
 
@@ -410,6 +478,7 @@ function download() {
 
 function goHome() {
   runId++;
+  fireWaiter?.();
   $('count').classList.remove('on', 'ready');
   clearShots();
   resultBlob = null;
@@ -454,28 +523,35 @@ mouse.addEventListener('status', ({ detail }) => {
   if (detail.state === 'connected') toast('micro:bit 연결 완료! 기울여서 커서를 움직여 보세요');
 });
 
+// micro:bit: A=이전, B=다음, A+B 동시·흔들기=촬영. 기울이기 커서는 프레임 고르기(가리키면 선택)
 mouse.addEventListener('press', ({ detail: { which, target } }) => {
   touch();
   const dlg = $('settings');
-  if (which === 'B') {
-    if (dlg.open) dlg.close();
-    else back();
+  if (dlg.open) {   // 설정창: A=커서 아래 누르기, B=닫기 (운영자용)
+    if (which === 'B') dlg.close();
+    else if (which === 'A' && target) target.click();
     return;
   }
-  // A: 커서 아래 버튼을 클릭. 아무것도 없으면 그 화면의 기본 동작(다음으로)
-  if (target && target !== $('intro')) { target.click(); return; }
-  if (!dlg.open) next();
+  if (which === 'AB') fire();
+  else if (which === 'A') prev();
+  else if (which === 'B') next();
+});
+mouse.addEventListener('shake', () => { touch(); fire(); });
+mouse.addEventListener('hover', ({ detail: { target } }) => {
+  if (stage === 'frame' && target?.classList.contains('frame') && !target.classList.contains('sel')) target.click();
 });
 
-// 화면별 '다음'과 '뒤로' — micro:bit A/B, Enter/Esc 가 같은 동작
+// 화면별 이전/다음 — micro:bit A/B, 키보드 ←/→ 가 같은 동작
 function next() {
   if (stage === 'intro') begin();
-  else if (stage === 'frame') shoot();
+  else if (stage === 'frame') shoot(false);
+  else if (stage === 'shooting') fire();      // 촬영 중 '다음' = 이번 컷 찍기
   else if (stage === 'result') goHome();
 }
-function back() {
+function prev() {
   if (stage === 'shooting') cancelShoot();
-  else if (stage === 'frame' || stage === 'result') goHome();
+  else if (stage === 'frame') goHome();
+  else if (stage === 'result') shoot(false);  // 다시 찍기(같은 프레임)
 }
 function touch() {
   lastInput = Date.now();
@@ -502,9 +578,10 @@ dlg.addEventListener('close', () => document.body.append($('cursor')));
 
 // ───────── 이벤트 연결 ─────────
 $('intro').addEventListener('click', begin);
-$('start-btn').onclick = shoot;
+$('start-btn').onclick = () => shoot(false);
+$('shutter-btn').onclick = fire;
 $('download-btn').onclick = download;
-$('retry-btn').onclick = shoot;
+$('retry-btn').onclick = () => shoot(false);
 $('home-btn').onclick = goHome;
 $('settings-btn').onclick = openSettings;
 $('cam-chip').onclick = () => (stream ? openSettings() : openCamera());
@@ -541,16 +618,16 @@ addEventListener('keydown', e => {
   touch();
   if (mouse.simKey(e, true)) { e.preventDefault(); return; }
   const k = e.key;
-  if (k === 'Enter' || k === ' ') { e.preventDefault(); if (!e.repeat) next(); return; }
-  if (k === 'Escape' || k === 'Backspace') { e.preventDefault(); back(); return; }
-  if (stage === 'intro' && k.length === 1) { begin(); return; }    // 시작 화면은 아무 키나
-  if (stage === 'intro' && k === 'ArrowRight') { begin(); return; }
-  if (stage === 'frame' && (k === 'ArrowLeft' || k === 'ArrowRight')) { e.preventDefault(); stepFrame(k === 'ArrowLeft' ? -1 : 1); return; }
-  if (stage === 'result' && (k === 'r' || k === 'R')) { shoot(); return; }
+  if (k === ' ') { e.preventDefault(); if (!e.repeat) fire(); return; }                       // 촬영
+  if (k === 'Enter' || k === 'ArrowRight') { e.preventDefault(); if (!e.repeat) next(); return; }
+  if (k === 'Escape' || k === 'Backspace' || k === 'ArrowLeft') { e.preventDefault(); if (!e.repeat) prev(); return; }
+  if (stage === 'frame' && (k === 'ArrowUp' || k === 'ArrowDown')) { e.preventDefault(); stepFrame(k === 'ArrowUp' ? -1 : 1); return; }
+  if (stage === 'frame' && k >= '1' && k <= String(FRAMES.length)) { pickFrame(FRAMES[k - 1].id); return; }
   if (stage === 'result' && (k === 's' || k === 'S')) { download(); return; }
+  if (stage === 'intro' && k.length === 1) { begin(); return; }    // 시작 화면은 아무 키나
 });
-addEventListener('pointerdown', touch);
 addEventListener('keyup', e => mouse.simKey(e, false));
+addEventListener('pointerdown', touch);
 
 // ───────── 시작 ─────────
 $('strip-date').textContent = `GGF 2026 · ${today()}`;
@@ -560,17 +637,15 @@ setStage('intro');
 
 function checkServer() {
   serverOK = null;
-  $('share-info').textContent = '확인 중…';
+  const fb = `1순위: <b>디랩레포트시스템 Firebase</b>(<code>${FIREBASE_SHARE.bucket}</code>)에 올리고 QR로 <code>p.html</code> 사진 받기 페이지를 열어요. 휴대폰 데이터로도 열려요.`;
+  $('share-info').innerHTML = fb + '<br>2순위 사진 서버 확인 중…';
   fetch(`${apiBase()}/api/health`, { signal: AbortSignal.timeout(6000) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(h => {
-  serverOK = true;
-  const local = /^http:\/\/(\d+\.){3}\d+/.test(h.shareBase);
-  $('share-info').innerHTML = `QR 주소: <code>${h.shareBase}</code><br>` + (local
-    ? '휴대폰이 <b>이 노트북과 같은 와이파이</b>에 있어야 열려요. 행사장 와이파이가 기기 간 통신을 막으면 <code>PUBLIC_BASE_URL</code>로 공개 주소를 지정하세요.'
-    : '이 주소로 휴대폰에서 사진을 받아요.');
-}).catch(() => {
-  serverOK = false;
-  $('share-info').innerHTML = '사진 서버에 연결할 수 없어요. 촬영·PC 저장은 되지만 <b>QR 전달은 꺼져요</b>.<br>노트북에서 <code>npm start</code>로 실행하거나, 아래에 서버 주소를 넣으세요.';
-});
+    serverOK = true;
+    $('share-info').innerHTML = fb + `<br>2순위(Firebase 실패 시): 노트북 사진 서버 <code>${h.shareBase}</code> — 같은 와이파이에서만 열려요.`;
+  }).catch(() => {
+    serverOK = false;
+    $('share-info').innerHTML = fb + '<br>2순위 노트북 사진 서버는 없음(선택 사항).';
+  });
 }
 checkServer();
 $('api-base').value = settings.apiBase;

@@ -2,7 +2,8 @@
 // micro:bit 에어마우스
 //  - 표준 BLE 서비스만 사용(MakeCode 블록으로 켜기만 하면 됨, 별도 프로토콜 없음)
 //    · Accelerometer Service → 기울기로 화면 커서 이동
-//    · Button Service        → A=클릭, B=뒤로
+//    · Button Service        → A=이전, B=다음, A+B 동시=촬영
+//    · 흔들기(가속도 급변)      → 촬영
 //    · LED Service(선택)      → 카운트다운 숫자를 micro:bit LED에 표시
 //  - 연결이 없을 때는 "가상 micro:bit"(방향키 + A/B 키)로 같은 경로를 리허설할 수 있음
 
@@ -45,6 +46,10 @@ export class MicrobitMouse extends EventTarget {
     this.calibrateNext = 0;
     this.manualClose = false;
     this.simKeys = new Set();
+    this.held = { A: false, B: false };   // 버튼을 누르고 있는지
+    this.pending = null;                  // A+B 판정을 위해 잠깐 미뤄 둔 단일 입력
+    this.shakeHits = [];
+    this.lastShake = -Infinity;
     this._loop = this._loop.bind(this);
     this._last = performance.now();
     requestAnimationFrame(this._loop);
@@ -90,8 +95,12 @@ export class MicrobitMouse extends EventTarget {
       const btn = await server.getPrimaryService(SVC.button);
       for (const [uuid, which] of [[CHR.buttonA, 'A'], [CHR.buttonB, 'B']]) {
         const c = await btn.getCharacteristic(uuid);
-        // 0=뗌, 1=누름, 2=길게 누름 → 누르는 순간만 사용
-        c.addEventListener('characteristicvaluechanged', e => { if (e.target.value.getUint8(0) === 1) this.press(which); });
+        // 0=뗌, 1=누름, 2=길게 누름
+        c.addEventListener('characteristicvaluechanged', e => {
+          const v = e.target.value.getUint8(0);
+          if (v === 1) this.press(which);
+          else if (v === 0) this.release(which);
+        });
         await c.startNotifications();
       }
     } catch { missing.push('버튼'); }
@@ -144,6 +153,7 @@ export class MicrobitMouse extends EventTarget {
     // x, y, z: int16 little-endian, 단위 mg
     this.raw.x = view.getInt16(0, true);
     this.raw.y = view.getInt16(2, true);
+    this._detectShake(this.raw.x, this.raw.y, view.byteLength >= 6 ? view.getInt16(4, true) : -1000);
     if (this.calibrateNext > 0) {
       this.neutral.x += (this.raw.x - this.neutral.x) * 0.5;
       this.neutral.y += (this.raw.y - this.neutral.y) * 0.5;
@@ -173,16 +183,49 @@ export class MicrobitMouse extends EventTarget {
       this.raw.y = (this.simKeys.has('ArrowDown') ? t : 0) - (this.simKeys.has('ArrowUp') ? t : 0);
       return true;
     }
-    if (down && !e.repeat && (k === 'a' || k === 'A')) { this.press('A'); return true; }
-    if (down && !e.repeat && (k === 'b' || k === 'B')) { this.press('B'); return true; }
+    if (k === 'a' || k === 'A' || k === 'b' || k === 'B') {
+      const w = k.toUpperCase();
+      if (!down) this.release(w);
+      else if (!e.repeat) this.press(w);
+      return true;
+    }
+    if (down && !e.repeat && (k === 'z' || k === 'Z')) { this.shake(); return true; }   // 흔들기 흉내
     return false;
   }
 
+  // A+B: 거의 동시에 누르거나(0.25초 안), 한 버튼을 누른 채 다른 버튼을 누르면 'AB'
   press(which) {
+    const other = which === 'A' ? 'B' : 'A';
+    this.held[which] = true;
     this.cursor.classList.remove('pressing');
     void this.cursor.offsetWidth;
     this.cursor.classList.add('pressing');
-    this._emit('press', { which, target: which === 'A' ? this.hover : null });
+    if (this.pending?.which === other || this.held[other]) {
+      if (this.pending) { clearTimeout(this.pending.timer); this.pending = null; }
+      this._emit('press', { which: 'AB', target: null });
+      return;
+    }
+    if (this.pending) { clearTimeout(this.pending.timer); this._emit('press', { which: this.pending.which, target: this.pending.target }); }
+    const target = this.hover;
+    this.pending = { which, target, timer: setTimeout(() => { this.pending = null; this._emit('press', { which, target }); }, 250) };
+  }
+  release(which) { this.held[which] = false; }
+
+  shake() {
+    const now = performance.now();
+    if (now - this.lastShake < 1800) return;
+    this.lastShake = now;
+    this.vel = { x: 0, y: 0 };
+    this._emit('shake', {});
+  }
+
+  // 0.7초 안에 1g 에서 크게 벗어난 값(>~1.9g 또는 거의 0g)이 4번 이상 → 흔들기
+  _detectShake(x, y, z) {
+    const now = performance.now();
+    const g = Math.hypot(x, y, z);
+    if (Math.abs(g - 1000) > 900) this.shakeHits.push(now);
+    while (this.shakeHits.length && now - this.shakeHits[0] > 700) this.shakeHits.shift();
+    if (this.shakeHits.length >= 4) { this.shakeHits = []; this.shake(); }
   }
 
   // ───────── 커서 ─────────
@@ -228,6 +271,7 @@ export class MicrobitMouse extends EventTarget {
     this.hover?.classList.remove('mb-hover');
     this.hover = target;
     target?.classList.add('mb-hover');
+    this._emit('hover', { target });
     this.cursor.classList.toggle('on-target', !!target);
   }
 
