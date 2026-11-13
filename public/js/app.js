@@ -527,16 +527,16 @@ mouse.addEventListener('status', ({ detail }) => {
     connected: ['ok', 'micro:bit 연결됨', `${detail.name} 연결됨${detail.missing?.length ? ` (없는 서비스: ${detail.missing.join(', ')})` : ''}`],
     disconnected: ['warn', 'micro:bit 재연결 중', '연결이 끊겼어요. 자동으로 다시 연결하는 중…'],
     lost: ['', 'micro:bit 미연결', '연결 안 됨 — 다시 연결을 눌러 주세요'],
-    simulating: ['ok', '가상 micro:bit', '가상 micro:bit 사용 중 (방향키로 기울이기, A·B 키)'],
+    simulating: ['ok', '가상 micro:bit', '가상 micro:bit 사용 중 (A·B 키, 두 키 동시 = A+B, Z = 흔들기)'],
   };
   const [cls, short, long] = map[detail.state] || map.lost;
   chip('ble-chip', cls, short);
   $('ble-state').textContent = long;
   $('ble-btn').textContent = detail.state === 'connected' ? '연결 끊기' : 'ᛒ 블루투스 연결';
-  if (detail.state === 'connected') toast('micro:bit 연결 완료! 기울여서 커서를 움직여 보세요');
+  if (detail.state === 'connected') toast('micro:bit 연결 완료! A 이전 · B 다음 · 흔들면 찰칵');
 });
 
-// micro:bit: A=이전, B=다음, A+B 동시·흔들기=촬영. 기울이기 커서는 프레임 고르기(가리키면 선택)
+// micro:bit: A=이전, B=다음, A+B 동시·흔들기=촬영 (기울이기 커서는 쓰지 않음)
 mouse.addEventListener('press', ({ detail: { which, target } }) => {
   touch();
   const dlg = $('settings');
