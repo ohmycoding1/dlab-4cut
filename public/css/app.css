@@ -19,12 +19,17 @@
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   word-break: keep-all;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
   margin: 0;
   overflow: hidden;
+  /* 다른 페이지 안에 끼워져도(기본 body 스타일이 있어도) 앱 색·글꼴을 그대로 유지 */
+  color: var(--ink);
+  font: inherit;
+  color-scheme: dark;
   background:
     radial-gradient(1200px 600px at 85% -10%, #24345255, transparent 60%),
     radial-gradient(900px 500px at -10% 110%, #3a2a1e44, transparent 60%),
