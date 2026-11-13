@@ -60,13 +60,14 @@ export class MicrobitMouse extends EventTarget {
   get active() { return this.connected || this.simulating; }
 
   // ───────── BLE 연결 ─────────
-  async connect() {
+  // all=true: 이름으로 거르지 않고 주변 블루투스 기기를 모두 보여 줌(목록에 micro:bit 가 안 보일 때 확인용)
+  async connect(all = false) {
     if (!this.supported) throw new Error('이 브라우저는 Web Bluetooth를 지원하지 않아요. PC용 Chrome/Edge에서 localhost 또는 HTTPS로 접속해 주세요.');
     // micro:bit 는 서비스 UUID를 광고하지 않으므로 이름으로 찾아야 목록에 뜸
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: 'BBC micro:bit' }],
-      optionalServices: [SVC.accel, SVC.button, SVC.led],
-    });
+    const optionalServices = [SVC.accel, SVC.button, SVC.led];
+    const device = await navigator.bluetooth.requestDevice(all
+      ? { acceptAllDevices: true, optionalServices }
+      : { filters: [{ namePrefix: 'BBC micro:bit' }], optionalServices });
     this.manualClose = false;
     await this._attach(device);
   }

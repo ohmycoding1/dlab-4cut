@@ -561,13 +561,16 @@ setInterval(() => {
   if (stage === 'frame' && !dlg.open && Date.now() - lastInput > IDLE_HOME_SEC * 1000) goHome();
 }, 1000);
 
-async function toggleBLE() {
-  if (mouse.connected) { mouse.disconnect(); return; }
-  try { await mouse.connect(); } catch (e) {
+async function toggleBLE(all = false) {
+  if (mouse.connected && !all) { mouse.disconnect(); return; }
+  try { await mouse.connect(all); } catch (e) {
     if (e.name === 'NotFoundError') return; // 사용자가 선택창을 닫음
     chip('ble-chip', '', 'micro:bit 미연결');
-    $('ble-state').textContent = e.message;
-    toast('블루투스 연결 실패: ' + e.message, true, 6000);
+    const why = e.name === 'SecurityError'
+      ? '이 화면에서는 블루투스를 쓸 수 없어요. Chrome/Edge 새 탭에서 https://ohmycoding1.github.io/dlab-4cut/ 를 직접 열어 주세요.'
+      : e.message;
+    $('ble-state').textContent = why;
+    toast('블루투스 연결 실패: ' + why, true, 8000);
   }
 }
 
@@ -585,8 +588,9 @@ $('retry-btn').onclick = () => shoot(false);
 $('home-btn').onclick = goHome;
 $('settings-btn').onclick = openSettings;
 $('cam-chip').onclick = () => (stream ? openSettings() : openCamera());
-$('ble-chip').onclick = () => (mouse.connected ? openSettings() : toggleBLE());
-$('ble-btn').onclick = toggleBLE;
+$('ble-chip').onclick = () => (mouse.connected ? openSettings() : toggleBLE(false));
+$('ble-btn').onclick = () => toggleBLE(false);
+$('ble-all-btn').onclick = () => toggleBLE(true);
 $('calib-btn').onclick = () => { mouse.calibrate(); toast('지금 자세를 기준으로 맞췄어요'); };
 $('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
 
