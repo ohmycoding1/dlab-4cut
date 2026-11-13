@@ -1,7 +1,7 @@
 // 디랩네컷 micro:bit 리모컨 펌웨어 (micro:bit V2 / CODAL)
 // 웹앱(public/js/microbit.js)이 쓰는 표준 BLE 서비스만 켭니다.
 //   Accelerometer Service → 기울여서 커서 이동
-//   Button Service        → A = 선택, B = 뒤로
+//   Button Service        → A = 이전, B = 다음, A+B 동시 = 촬영 (흔들기는 브라우저가 가속도로 판단)
 //   LED Service           → 카운트다운 숫자 표시
 // 페어링 없이(Open link) 바로 연결됩니다.
 #include "MicroBit.h"
