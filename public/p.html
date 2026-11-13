@@ -85,39 +85,45 @@
       $('tip').classList.add('hide');
     }
 
+    // 사진은 <img> 로 바로 표시 (Storage 버킷에 CORS 설정이 없어도 보임)
+    // 원터치 저장용 파일(blob)은 따로 시도 — CORS 가 막혀 있으면 새 창 열기/길게 눌러 저장으로 대신함
     let blob = null;
+    let url = '';
     if (!isPhotoId(id)) {
       fail('사진 주소가 올바르지 않아요', 'QR 코드를 다시 찍어 주세요.');
     } else {
-      try {
-        const resp = await fetch(photoURL(id));
-        if (!resp.ok) throw new Error(resp.status);
-        blob = await resp.blob();
-        const img = new Image();
-        img.alt = '디랩네컷 사진';
-        img.src = URL.createObjectURL(blob);
-        await img.decode().catch(() => {});
+      url = photoURL(id);
+      const img = new Image();
+      img.alt = '디랩네컷 사진';
+      img.onload = () => {
         $('photo').replaceChildren(img);
         $('save').disabled = false;
-      } catch (e) {
-        fail('사진을 찾을 수 없어요', '보관 기간이 지났거나 아직 올라가는 중일 수 있어요. 잠시 뒤 다시 열어 주세요.');
-      }
+        fetch(url).then(r => (r.ok ? r.blob() : null)).then(b => { blob = b; }).catch(() => { blob = null; });
+      };
+      img.onerror = () => fail('사진을 찾을 수 없어요', '보관 기간이 지났거나 아직 올라가는 중일 수 있어요. 잠시 뒤 다시 열어 주세요.');
+      img.src = url;
     }
 
     $('save').onclick = async () => {
-      if (!blob) return;
-      const file = new File([blob], `DLAB_FOURCUTS_${id.slice(0, 6)}.jpg`, { type: 'image/jpeg' });
-      // 휴대폰: 공유 시트 → '이미지 저장'(iOS) / 갤러리 저장(Android)
-      if (navigator.canShare?.({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: '디랩네컷' }); return; }
-        catch (e) { if (e.name === 'AbortError') return; }
+      if (!url) return;
+      if (blob) {
+        const file = new File([blob], `DLAB_FOURCUTS_${id.slice(0, 6)}.jpg`, { type: 'image/jpeg' });
+        // 휴대폰: 공유 시트 → '이미지 저장'(iOS) / 갤러리 저장(Android)
+        if (navigator.canShare?.({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: '디랩네컷' }); return; }
+          catch (e) { if (e.name === 'AbortError') return; }
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(file);
+        a.download = file.name;
+        document.body.append(a);
+        a.click();
+        a.remove();
+        return;
       }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(file);
-      a.download = file.name;
-      document.body.append(a);
-      a.click();
-      a.remove();
+      // 파일을 직접 받을 수 없을 때: 사진만 크게 열어서 길게 눌러 저장
+      $('tip').innerHTML = '열린 사진을 <b>길게 눌러</b> ‘사진 앱에 저장’(또는 ‘이미지 다운로드’)을 고르세요.';
+      window.open(url, '_blank') || (location.href = url);
     };
   </script>
 </body>
