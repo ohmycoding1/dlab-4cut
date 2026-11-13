@@ -5,7 +5,7 @@
 //    · Button Service        → A=이전, B=다음, A+B 동시=촬영
 //    · 흔들기(가속도 급변)      → 촬영
 //    · LED Service(선택)      → 카운트다운 숫자를 micro:bit LED에 표시
-//  - 연결이 없을 때는 "가상 micro:bit"(방향키 + A/B 키)로 같은 경로를 리허설할 수 있음
+//  - 연결이 없을 때는 "가상 micro:bit"(A/B 키, Z = 흔들기)로 같은 경로를 리허설할 수 있음
 
 const UUID = id => `e95d${id}-251d-470a-a062-fa1922dfa9a8`;
 const SVC = { accel: UUID('0753'), button: UUID('9882'), led: UUID('d91d') };
@@ -177,13 +177,6 @@ export class MicrobitMouse extends EventTarget {
   simKey(e, down) {
     if (!this.simulating) return false;
     const k = e.key;
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(k)) {
-      down ? this.simKeys.add(k) : this.simKeys.delete(k);
-      const t = 650; // 기울기 흉내(mg)
-      this.raw.x = (this.simKeys.has('ArrowRight') ? t : 0) - (this.simKeys.has('ArrowLeft') ? t : 0);
-      this.raw.y = (this.simKeys.has('ArrowDown') ? t : 0) - (this.simKeys.has('ArrowUp') ? t : 0);
-      return true;
-    }
     if (k === 'a' || k === 'A' || k === 'b' || k === 'B') {
       const w = k.toUpperCase();
       if (!down) this.release(w);

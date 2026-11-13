@@ -58,7 +58,12 @@
           <div class="intro-cta"><span class="key b">B</span><span>버튼을 누르면 시작해요</span></div>
           <p class="intro-alt">바로 찍고 싶으면 <b>micro:bit를 흔들거나</b> <span class="key a">A</span>+<span class="key b">B</span> 동시에!</p>
         </div>
-        <div class="intro-strips" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="intro-strips" aria-hidden="true">
+          <div class="deco d1"><b>😄</b><b>😎</b><b>🥳</b><b>😜</b><span><svg class="deco-logo"><use href="#dlab-mark"/></svg></span></div>
+          <div class="deco d2"><b>🤩</b><b>😆</b><b>🫶</b><b>✌️</b><span><svg class="deco-logo"><use href="#dlab-mark"/></svg></span></div>
+          <div class="deco d3"><b>😊</b><b>🤪</b><b>😍</b><b>👍</b><span><svg class="deco-logo"><use href="#dlab-mark"/></svg></span></div>
+          <div class="deco d4"><b>🙌</b><b>😁</b><b>🤗</b><b>💖</b><span><svg class="deco-logo"><use href="#dlab-mark"/></svg></span></div>
+        </div>
       </section>
 
       <!-- 2. 프레임 고르기 -->
@@ -66,11 +71,12 @@
         <div class="pick-info">
           <span class="eyebrow">CHOOSE YOUR FRAME</span>
           <h2>프레임을 골라요</h2>
-          <p class="lead">micro:bit를 기울여 마음에 드는 색을 가리키세요.</p>
+          <p class="lead"><span class="key a">A</span> <span class="key b">B</span> 버튼으로 색을 바꾸고, 흔들면 촬영 시작!</p>
           <div class="frames" id="frames"></div>
+          <div class="frame-nav"><span><span class="key a">A</span> ◀ 이전 색</span><span>다음 색 ▶ <span class="key b">B</span></span></div>
           <button class="btn start" id="start-btn" disabled>
-            <span class="key b">B</span>
-            <span>촬영하러 가기</span>
+            <span class="shake-ico">👋</span>
+            <span>흔들어서 촬영 시작</span>
           </button>
           <p class="shoot-msg" id="shoot-msg">포즈를 바꿔 가며 4번 찍어요</p>
         </div>
@@ -79,7 +85,7 @@
             <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
             <div class="strip-foot">
               <svg class="strip-logo"><use href="#dlab-mark"/></svg>
-              <span id="strip-date"></span>
+              <span class="strip-date"></span>
             </div>
           </div>
         </div>
@@ -106,7 +112,15 @@
             </div>
           </div>
         </div>
-        <div class="mini-strip" id="mini-strip" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="shoot-strip" aria-hidden="true">
+          <div class="strip strip-live">
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="strip-foot">
+              <svg class="strip-logo"><use href="#dlab-mark"/></svg>
+              <span class="strip-date"></span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- 4. 결과 -->
@@ -130,6 +144,23 @@
       </section>
     </main>
 
+    <!-- 사용법 안내창: 시작 화면에서 B → 이 창 → B → 프레임 화면 -->
+    <div class="howto" id="howto" role="dialog" aria-modal="true" aria-labelledby="howto-title">
+      <div class="howto-card">
+        <span class="eyebrow">HOW TO PLAY</span>
+        <h2 id="howto-title">micro:bit 하나로 찍어요!</h2>
+        <ul class="howto-list">
+          <li><div class="howto-ico"><span class="key a">A</span><i>◀ ▶</i><span class="key b">B</span></div><b>색 고르기</b><p>프레임 화면에서<br>A·B로 색을 바꿔요</p></li>
+          <li class="one"><div class="howto-ico"><span class="key b">B</span></div><b>다음</b><p>다음 화면으로<br>넘어가요</p></li>
+          <li class="one"><div class="howto-ico"><span class="key a">A</span></div><b>이전 · 취소</b><p>앞 화면으로<br>돌아가요<br>(촬영 중엔 취소)</p></li>
+          <li class="hl"><div class="howto-ico"><span class="shake">👋</span><em>또는</em><span class="key a">A</span><i>+</i><span class="key b">B</span></div><b>흔들기 = 찰칵!</b><p>3초 뒤 한 컷 촬영<br>네 번 찍으면 완성</p></li>
+        </ul>
+        <p class="howto-note">컷마다 30초가 지나면 자동으로 찍혀요 · 완성되면 QR로 휴대폰에 저장!</p>
+        <button class="howto-go" id="howto-go"><span class="key b">B</span> 버튼을 누르면 시작해요</button>
+        <p class="howto-alt">키보드 <span class="key">→</span> 시작 · <span class="key">←</span> 닫기</p>
+      </div>
+    </div>
+
     <footer class="hint" id="hint"></footer>
     <div class="toast" id="toast" role="status"></div>
   </div>
@@ -150,16 +181,16 @@
         <p class="ble-state" id="ble-state">연결 안 됨</p>
         <div class="row">
           <button type="button" class="btn primary" id="ble-btn">ᛒ 블루투스 연결</button>
-          <button type="button" class="btn ghost" id="calib-btn">⊙ 지금 자세를 기준으로</button>
+          <button type="button" class="btn ghost" id="calib-btn" hidden>⊙ 지금 자세를 기준으로</button>
         </div>
         <div class="row">
           <button type="button" class="btn ghost" id="ble-all-btn">🔍 목록에 없으면: 모든 블루투스 기기에서 찾기</button>
         </div>
-        <label class="field">커서 속도 <input type="range" id="sens" min="1" max="5" step="1"><output id="sens-out"></output></label>
+        <label class="field" hidden>커서 속도 <input type="range" id="sens" min="1" max="5" step="1"><output id="sens-out"></output></label>
         <div class="row">
-          <label class="check"><input type="checkbox" id="inv-x"> 좌우 반전</label>
-          <label class="check"><input type="checkbox" id="inv-y"> 상하 반전</label>
-          <label class="check"><input type="checkbox" id="sim"> 가상 micro:bit (방향키·A·B)</label>
+          <label class="check" hidden><input type="checkbox" id="inv-x"> 좌우 반전</label>
+          <label class="check" hidden><input type="checkbox" id="inv-y"> 상하 반전</label>
+          <label class="check"><input type="checkbox" id="sim"> 가상 micro:bit (A·B 키, 두 키 동시 = A+B, Z = 흔들기)</label>
         </div>
         <p class="help">micro:bit LED에 <b>카메라 모양</b>이 떠 있어야 목록에 나와요(펌웨어가 들어간 상태). 휴대폰 앱·다른 탭 등 다른 곳에 이미 연결돼 있으면 안 보여요. 연결이 끊기면 자동으로 다시 붙어요.</p>
       </section>
