@@ -63,8 +63,8 @@ const K = {
 };
 const FIRE = `${K.k('흔들기')} 또는 ${K.a}+${K.b}`;
 const HINTS = {
-  intro: `${K.b} 시작 ${K.sep} ${FIRE} 바로 촬영 ${K.sep} 키보드 ${K.k('→')} 시작 · ${K.k('Space')} 촬영`,
-  frame: `${K.k('기울이기')} 프레임 고르기 ${K.sep} ${K.a} 이전 ${K.sep} ${K.b} 다음 ${K.sep} ${FIRE} 바로 촬영`,
+  intro: `${K.b} 사용법 보고 시작 ${K.sep} ${FIRE} 바로 촬영 ${K.sep} 키보드 ${K.k('→')} 시작 · ${K.k('Space')} 촬영`,
+  frame: `${K.a} ◀ 이전 색 ${K.sep} ${K.b} 다음 색 ▶ ${K.sep} ${FIRE} 촬영 시작 ${K.sep} 키보드 ${K.k('Esc')} 처음으로`,
   shooting: `${FIRE} 3초 뒤 찰칵 (컷마다 ${CUT_LIMIT_SEC}초 지나면 자동) ${K.sep} ${K.a} 취소 ${K.sep} 키보드 ${K.k('Space')} 찍기 · ${K.k('←')} 취소`,
   result: `${K.a} 다시 찍기 ${K.sep} ${K.b} 처음으로 ${K.sep} 키보드 ${K.k('←')} ${K.k('→')} · ${K.k('S')} PC에 저장`,
 };
@@ -87,7 +87,8 @@ function setStage(s) {
     li.classList.toggle('done', i < idx);
   });
   $('start-btn').disabled = !stream || s !== 'frame';
-  $('shoot-msg').innerHTML = stream ? `${FIRE} 하면 바로 촬영 시작!` : '카메라를 켜는 중이에요…';
+  $('shoot-msg').innerHTML = stream ? `흔들거나 ${K.a}+${K.b} 를 누르면 3초 뒤 첫 컷!` : '카메라를 켜는 중이에요…';
+  if (changed && howtoOpen) { howtoOpen = false; document.body.classList.remove('howto-on'); }
   $('hint').innerHTML = HINTS[s];
   if (s !== 'result') stopAutoHome();
   if (changed) {
@@ -119,15 +120,9 @@ function applyFrame() {
   document.documentElement.style.setProperty('--frame-ink', f.ink);
 }
 function renderStrip(nextIndex = -1) {
-  document.querySelectorAll('#mini-strip i').forEach((c, i) => {
-    c.classList.toggle('next', i === nextIndex);
-    const src = shots[i]?.url || '';
-    if (c.dataset.src === src) return;
-    c.dataset.src = src;
-    c.style.backgroundImage = src ? `url("${src}")` : '';
-    c.classList.toggle('filled', !!src);
-  });
-  document.querySelectorAll('#strip .cell').forEach((c, i) => {
+  // 프레임 화면 미리보기와 촬영 화면 오른쪽 프레임 모두: 찍은 컷을 차례로 채우고, 다음 칸은 깜빡임
+  document.querySelectorAll('.strip').forEach(strip => strip.querySelectorAll('.cell').forEach((c, i) => {
+    c.classList.toggle('next', i === nextIndex && !shots[i]);
     const src = shots[i]?.url;
     if (!src) { c.replaceChildren(); return; }
     if (c.firstChild?.src !== src) {
@@ -136,7 +131,7 @@ function renderStrip(nextIndex = -1) {
       img.alt = `${i + 1}번째 컷`;
       c.replaceChildren(img);
     }
-  });
+  }));
 }
 const today = () => { const d = new Date(); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -255,6 +250,7 @@ function waitFire(alive) {
 function fire() {
   if (dlg.open) return;
   if (stage === 'shooting') { fireWaiter?.(); return; }
+  if (howtoOpen) closeHowto();
   if (stage === 'intro' && !stream) { begin(); return; }   // 카메라부터 켜야 함
   shoot(true);
 }
@@ -486,9 +482,26 @@ function goHome() {
 }
 // 시작 화면 → 프레임 화면. 카메라가 아직이면 이때 켬(사용자 조작이 있어야 권한 창이 뜸)
 function begin() {
+  if (howtoOpen) closeHowto();
   if (stage !== 'intro') return;
   if (!stream) openCamera();
   setStage('frame');
+}
+// 사용법 안내창: 시작 화면에서 B(다음) → 안내 → B → 프레임 화면, A → 닫기
+let howtoOpen = false;
+function openHowto() {
+  if (stage !== 'intro' || howtoOpen) return;
+  howtoOpen = true;
+  lastInput = Date.now();
+  document.body.classList.add('howto-on');
+  $('hint').innerHTML = `${K.b} 시작하기 ${K.sep} ${K.a} 닫기 ${K.sep} ${FIRE} 바로 촬영`;
+  if (!stream) openCamera();   // 안내를 읽는 동안 카메라 준비
+}
+function closeHowto() {
+  if (!howtoOpen) return;
+  howtoOpen = false;
+  document.body.classList.remove('howto-on');
+  $('hint').innerHTML = HINTS[stage];
 }
 
 const AUTO_HOME_SEC = 60;
@@ -514,22 +527,21 @@ mouse.addEventListener('status', ({ detail }) => {
     connected: ['ok', 'micro:bit 연결됨', `${detail.name} 연결됨${detail.missing?.length ? ` (없는 서비스: ${detail.missing.join(', ')})` : ''}`],
     disconnected: ['warn', 'micro:bit 재연결 중', '연결이 끊겼어요. 자동으로 다시 연결하는 중…'],
     lost: ['', 'micro:bit 미연결', '연결 안 됨 — 다시 연결을 눌러 주세요'],
-    simulating: ['ok', '가상 micro:bit', '가상 micro:bit 사용 중 (방향키로 기울이기, A·B 키)'],
+    simulating: ['ok', '가상 micro:bit', '가상 micro:bit 사용 중 (A·B 키, 두 키 동시 = A+B, Z = 흔들기)'],
   };
   const [cls, short, long] = map[detail.state] || map.lost;
   chip('ble-chip', cls, short);
   $('ble-state').textContent = long;
   $('ble-btn').textContent = detail.state === 'connected' ? '연결 끊기' : 'ᛒ 블루투스 연결';
-  if (detail.state === 'connected') toast('micro:bit 연결 완료! 기울여서 커서를 움직여 보세요');
+  if (detail.state === 'connected') toast('micro:bit 연결 완료! A 이전 · B 다음 · 흔들면 찰칵');
 });
 
-// micro:bit: A=이전, B=다음, A+B 동시·흔들기=촬영. 기울이기 커서는 프레임 고르기(가리키면 선택)
+// micro:bit: A=이전, B=다음, A+B 동시·흔들기=촬영 (기울이기 커서는 쓰지 않음)
 mouse.addEventListener('press', ({ detail: { which, target } }) => {
   touch();
   const dlg = $('settings');
-  if (dlg.open) {   // 설정창: A=커서 아래 누르기, B=닫기 (운영자용)
+  if (dlg.open) {   // 설정창(운영자용, 마우스로 조작): B=닫기
     if (which === 'B') dlg.close();
-    else if (which === 'A' && target) target.click();
     return;
   }
   if (which === 'AB') fire();
@@ -537,20 +549,19 @@ mouse.addEventListener('press', ({ detail: { which, target } }) => {
   else if (which === 'B') next();
 });
 mouse.addEventListener('shake', () => { touch(); fire(); });
-mouse.addEventListener('hover', ({ detail: { target } }) => {
-  if (stage === 'frame' && target?.classList.contains('frame') && !target.classList.contains('sel')) target.click();
-});
 
 // 화면별 이전/다음 — micro:bit A/B, 키보드 ←/→ 가 같은 동작
 function next() {
-  if (stage === 'intro') begin();
-  else if (stage === 'frame') shoot(false);
+  if (howtoOpen) { begin(); return; }
+  if (stage === 'intro') openHowto();
+  else if (stage === 'frame') stepFrame(1);   // 프레임 화면: B = 다음 색
   else if (stage === 'shooting') fire();      // 촬영 중 '다음' = 이번 컷 찍기
   else if (stage === 'result') goHome();
 }
 function prev() {
+  if (howtoOpen) { closeHowto(); return; }
   if (stage === 'shooting') cancelShoot();
-  else if (stage === 'frame') goHome();
+  else if (stage === 'frame') stepFrame(-1);   // 프레임 화면: A = 이전 색
   else if (stage === 'result') shoot(false);  // 다시 찍기(같은 프레임)
 }
 function touch() {
@@ -559,6 +570,7 @@ function touch() {
 }
 setInterval(() => {
   if (stage === 'frame' && !dlg.open && Date.now() - lastInput > IDLE_HOME_SEC * 1000) goHome();
+  if (howtoOpen && Date.now() - lastInput > IDLE_HOME_SEC * 1000) closeHowto();
 }, 1000);
 
 async function toggleBLE(all = false) {
@@ -580,8 +592,9 @@ function openSettings() { dlg.showModal(); dlg.append($('cursor')); }
 dlg.addEventListener('close', () => document.body.append($('cursor')));
 
 // ───────── 이벤트 연결 ─────────
-$('intro').addEventListener('click', begin);
-$('start-btn').onclick = () => shoot(false);
+$('intro').addEventListener('click', () => next());
+$('howto').addEventListener('click', () => begin());
+$('start-btn').onclick = () => shoot(true);
 $('shutter-btn').onclick = fire;
 $('download-btn').onclick = download;
 $('retry-btn').onclick = () => shoot(false);
@@ -624,17 +637,18 @@ addEventListener('keydown', e => {
   const k = e.key;
   if (k === ' ') { e.preventDefault(); if (!e.repeat) fire(); return; }                       // 촬영
   if (k === 'Enter' || k === 'ArrowRight') { e.preventDefault(); if (!e.repeat) next(); return; }
+  if ((k === 'Escape' || k === 'Backspace') && stage === 'frame') { e.preventDefault(); goHome(); return; }
   if (k === 'Escape' || k === 'Backspace' || k === 'ArrowLeft') { e.preventDefault(); if (!e.repeat) prev(); return; }
   if (stage === 'frame' && (k === 'ArrowUp' || k === 'ArrowDown')) { e.preventDefault(); stepFrame(k === 'ArrowUp' ? -1 : 1); return; }
   if (stage === 'frame' && k >= '1' && k <= String(FRAMES.length)) { pickFrame(FRAMES[k - 1].id); return; }
   if (stage === 'result' && (k === 's' || k === 'S')) { download(); return; }
-  if (stage === 'intro' && k.length === 1) { begin(); return; }    // 시작 화면은 아무 키나
+  if (stage === 'intro' && !howtoOpen && k.length === 1) { openHowto(); return; }    // 시작 화면은 아무 키나
 });
 addEventListener('keyup', e => mouse.simKey(e, false));
 addEventListener('pointerdown', touch);
 
 // ───────── 시작 ─────────
-$('strip-date').textContent = `GGF 2026 · ${today()}`;
+document.querySelectorAll('.strip-date').forEach(el => { el.textContent = `GGF 2026 · ${today()}`; });
 applyFrame();
 renderFrames();
 setStage('intro');
