@@ -31,7 +31,9 @@ const OUT = { w: 1200, h: 3600, pad: 60, top: 70, cw: 1080, ch: 720, gap: 36 };
 const SHOT = { w: 1500, h: 1000 };
 
 let stream = null;
-let stage = 'idle';
+let stage = 'intro';
+const ORDER = ['intro', 'frame', 'shooting', 'result'];
+let lastInput = Date.now();
 let shots = [];
 let runId = 0;              // 촬영 취소용
 let resultBlob = null, resultURL = '';
@@ -53,12 +55,43 @@ function chip(id, cls, text) {
   if (cls) c.classList.add(cls);
   c.querySelector('span').textContent = text;
 }
+const K = {
+  a: '<span class="key a">A</span>', b: '<span class="key b">B</span>',
+  k: t => `<span class="key">${t}</span>`, sep: '<span class="sep"></span>',
+};
+const HINTS = {
+  intro: `${K.a} 또는 ${K.k('Enter')} 또는 클릭 → 시작`,
+  frame: `${K.k('기울이기')} ${K.k('← →')} 프레임 바꾸기 ${K.sep} ${K.a} ${K.k('Enter')} 촬영 시작 ${K.sep} ${K.b} ${K.k('Esc')} 처음으로`,
+  shooting: `화면을 보고 포즈! 자동으로 4번 찍어요 ${K.sep} ${K.b} ${K.k('Esc')} 취소`,
+  result: `${K.a} ${K.k('Enter')} 처음으로 ${K.sep} ${K.k('R')} 다시 찍기 ${K.sep} ${K.k('S')} PC에 저장`,
+};
+// 화면 넘김: 현재 화면보다 앞은 왼쪽(past), 뒤는 오른쪽(future)으로 접힘
 function setStage(s) {
+  const changed = s !== stage;
   stage = s;
   document.body.dataset.stage = s;
-  $('start-btn').disabled = !stream || s !== 'idle';
-  $('shoot-msg').textContent = s === 'shooting' ? '화면을 보고 포즈! B를 누르면 취소돼요' : stream ? '포즈를 바꿔 가며 4번 찍어요' : '먼저 카메라를 켜 주세요';
+  const idx = ORDER.indexOf(s);
+  document.querySelectorAll('.screen').forEach(el => {
+    const i = ORDER.indexOf(el.dataset.screen);
+    el.classList.toggle('past', i < idx);
+    el.classList.toggle('current', i === idx);
+    el.classList.toggle('future', i > idx);
+    el.inert = i !== idx;
+  });
+  document.querySelectorAll('.steps li').forEach(li => {
+    const i = ORDER.indexOf(li.dataset.for);
+    li.classList.toggle('on', i === idx);
+    li.classList.toggle('done', i < idx);
+  });
+  $('start-btn').disabled = !stream || s !== 'frame';
+  $('shoot-msg').textContent = stream ? '포즈를 바꿔 가며 4번 찍어요' : '카메라를 켜는 중이에요…';
+  $('hint').innerHTML = HINTS[s];
   if (s !== 'result') stopAutoHome();
+  if (changed) {
+    document.activeElement?.blur?.();
+    const aim = { intro: null, frame: $('start-btn'), result: $('home-btn') }[s];
+    setTimeout(() => { if (stage === s) aim ? mouse.warpTo(aim) : mouse.warpTo($('deck')); }, 850);
+  }
 }
 
 function renderFrames() {
@@ -68,9 +101,14 @@ function renderFrames() {
     b.style.setProperty('--c', f.bg);
     b.style.setProperty('--k', f.ink);
     b.innerHTML = `<span class="sw"></span>${f.name}`;
-    b.onclick = () => { settings.frame = f.id; save(); applyFrame(); renderFrames(); };
+    b.onclick = () => { if (settings.frame === f.id) { shoot(); return; } pickFrame(f.id); };
     return b;
   }));
+}
+function pickFrame(id) { settings.frame = id; save(); applyFrame(); renderFrames(); }
+function stepFrame(d) {
+  const i = FRAMES.findIndex(f => f.id === frame().id);
+  pickFrame(FRAMES[(i + d + FRAMES.length) % FRAMES.length].id);
 }
 function applyFrame() {
   const f = frame();
@@ -78,8 +116,15 @@ function applyFrame() {
   document.documentElement.style.setProperty('--frame-ink', f.ink);
 }
 function renderStrip(nextIndex = -1) {
-  document.querySelectorAll('#strip .cell').forEach((c, i) => {
+  document.querySelectorAll('#mini-strip i').forEach((c, i) => {
     c.classList.toggle('next', i === nextIndex);
+    const src = shots[i]?.url || '';
+    if (c.dataset.src === src) return;
+    c.dataset.src = src;
+    c.style.backgroundImage = src ? `url("${src}")` : '';
+    c.classList.toggle('filled', !!src);
+  });
+  document.querySelectorAll('#strip .cell').forEach((c, i) => {
     const src = shots[i]?.url;
     if (!src) { c.replaceChildren(); return; }
     if (c.firstChild?.src !== src) {
@@ -131,17 +176,28 @@ async function openCamera() {
       : { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } };
     stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
     $('video').srcObject = stream;
+    $('intro-video').srcObject = stream;
     await $('video').play();
+    $('intro-video').play().then(() => $('intro-video').classList.add('live')).catch(() => {});
     $('placeholder').classList.add('hide');
     const track = stream.getVideoTracks()[0];
     const { width, height } = track.getSettings();
     chip('cam-chip', 'ok', `카메라 ${width || ''}${height ? '×' + height : ''}`);
-    track.addEventListener('ended', () => { stream = null; chip('cam-chip', 'warn', '카메라 끊김'); $('placeholder').classList.remove('hide'); setStage(stage === 'shooting' ? 'idle' : stage); });
+    track.addEventListener('ended', () => {
+      stream = null;
+      chip('cam-chip', 'warn', '카메라 끊김');
+      $('intro-video').classList.remove('live');
+      $('placeholder').classList.remove('hide');
+      if (stage === 'shooting') { runId++; clearShots(); setStage('frame'); } else setStage(stage);
+    });
     fillCameraList();
     setStage(stage);
   } catch (e) {
     stream = null;
     chip('cam-chip', 'warn', '카메라 오류');
+    $('placeholder').classList.remove('hide');
+    $('placeholder').querySelector('p').textContent = '카메라를 열 수 없어요';
+    setStage(stage);
     toast('카메라를 열 수 없어요. 브라우저 카메라 권한과 다른 앱 사용 여부를 확인해 주세요.', true);
     console.warn(e);
   }
@@ -171,12 +227,19 @@ function capture() {
 
 // ───────── 촬영 ─────────
 async function shoot() {
-  if (!stream || stage !== 'idle') return;
+  if (stage !== 'frame' && stage !== 'result') return;
+  if (!stream) { toast('카메라가 아직 준비되지 않았어요', true); if (stage === 'frame') openCamera(); return; }
   const id = ++runId;
   clearShots();
   setStage('shooting');
   const alive = () => id === runId && stage === 'shooting';
   try {
+    // 화면이 넘어오는 동안 "준비!" 안내
+    $('shot-badge').textContent = '';
+    $('count').classList.add('on', 'ready');
+    $('count').innerHTML = '<span>포즈 준비!</span>';
+    await sleep(1600);
+    $('count').classList.remove('ready');
     for (let i = 0; i < 4; i++) {
       renderStrip(i);
       $('shot-badge').textContent = `${i + 1} / 4 컷`;
@@ -206,16 +269,16 @@ async function shoot() {
   } catch (e) {
     console.error(e);
     toast('촬영 중 문제가 생겼어요: ' + e.message, true);
-    if (id === runId) setStage('idle');
+    if (id === runId) setStage('frame');
   } finally {
     if (id === runId) { $('count').classList.remove('on'); mouse.show('smile'); }
   }
 }
 function cancelShoot() {
   runId++;
-  $('count').classList.remove('on');
+  $('count').classList.remove('on', 'ready');
   clearShots();
-  setStage('idle');
+  setStage('frame');
   mouse.show('smile');
   toast('촬영을 취소했어요');
 }
@@ -295,7 +358,6 @@ async function compose() {
 function showResult() {
   $('final-img').src = resultURL;
   setStage('result');
-  mouse.warpTo($('home-btn'));
   upload();
   startAutoHome();
 }
@@ -348,13 +410,20 @@ function download() {
 
 function goHome() {
   runId++;
+  $('count').classList.remove('on', 'ready');
   clearShots();
   resultBlob = null;
-  setStage('idle');
-  if (stream) mouse.warpTo($('start-btn'));
+  setStage('intro');
+}
+// 시작 화면 → 프레임 화면. 카메라가 아직이면 이때 켬(사용자 조작이 있어야 권한 창이 뜸)
+function begin() {
+  if (stage !== 'intro') return;
+  if (!stream) openCamera();
+  setStage('frame');
 }
 
-const AUTO_HOME_SEC = 90;
+const AUTO_HOME_SEC = 60;
+const IDLE_HOME_SEC = 60;   // 프레임 화면에서 아무 조작이 없으면 처음으로
 function startAutoHome() {
   stopAutoHome();
   let left = AUTO_HOME_SEC;
@@ -386,18 +455,35 @@ mouse.addEventListener('status', ({ detail }) => {
 });
 
 mouse.addEventListener('press', ({ detail: { which, target } }) => {
-  if (stage === 'result') startAutoHome();     // 누군가 조작 중이면 자동 복귀 연장
+  touch();
   const dlg = $('settings');
   if (which === 'B') {
     if (dlg.open) dlg.close();
-    else if (stage === 'shooting') cancelShoot();
-    else if (stage === 'result') goHome();
+    else back();
     return;
   }
-  // A: 커서 아래 버튼을 클릭. 아무것도 없으면 상황별 기본 동작
-  if (target) { target.click(); return; }
-  if (stage === 'idle' && !dlg.open) shoot();
+  // A: 커서 아래 버튼을 클릭. 아무것도 없으면 그 화면의 기본 동작(다음으로)
+  if (target && target !== $('intro')) { target.click(); return; }
+  if (!dlg.open) next();
 });
+
+// 화면별 '다음'과 '뒤로' — micro:bit A/B, Enter/Esc 가 같은 동작
+function next() {
+  if (stage === 'intro') begin();
+  else if (stage === 'frame') shoot();
+  else if (stage === 'result') goHome();
+}
+function back() {
+  if (stage === 'shooting') cancelShoot();
+  else if (stage === 'frame' || stage === 'result') goHome();
+}
+function touch() {
+  lastInput = Date.now();
+  if (stage === 'result') startAutoHome();     // 누군가 조작 중이면 자동 복귀 연장
+}
+setInterval(() => {
+  if (stage === 'frame' && !dlg.open && Date.now() - lastInput > IDLE_HOME_SEC * 1000) goHome();
+}, 1000);
 
 async function toggleBLE() {
   if (mouse.connected) { mouse.disconnect(); return; }
@@ -415,10 +501,10 @@ function openSettings() { dlg.showModal(); dlg.append($('cursor')); }
 dlg.addEventListener('close', () => document.body.append($('cursor')));
 
 // ───────── 이벤트 연결 ─────────
-$('camera-btn').onclick = openCamera;
+$('intro').addEventListener('click', begin);
 $('start-btn').onclick = shoot;
 $('download-btn').onclick = download;
-$('retry-btn').onclick = () => { goHome(); shoot(); };
+$('retry-btn').onclick = shoot;
 $('home-btn').onclick = goHome;
 $('settings-btn').onclick = openSettings;
 $('cam-chip').onclick = () => (stream ? openSettings() : openCamera());
@@ -451,17 +537,26 @@ if (settings.simulate) mouse.setSimulate(true);
 
 addEventListener('keydown', e => {
   if (e.target.closest?.('select, input')) return;
+  if (dlg.open || e.ctrlKey || e.metaKey || e.altKey) return;
+  touch();
   if (mouse.simKey(e, true)) { e.preventDefault(); return; }
-  if (e.key === 'Enter' && stage === 'idle' && !dlg.open) shoot();
-  if (e.key === 'Escape' && stage === 'shooting') cancelShoot();
+  const k = e.key;
+  if (k === 'Enter' || k === ' ') { e.preventDefault(); if (!e.repeat) next(); return; }
+  if (k === 'Escape' || k === 'Backspace') { e.preventDefault(); back(); return; }
+  if (stage === 'intro' && k.length === 1) { begin(); return; }    // 시작 화면은 아무 키나
+  if (stage === 'intro' && k === 'ArrowRight') { begin(); return; }
+  if (stage === 'frame' && (k === 'ArrowLeft' || k === 'ArrowRight')) { e.preventDefault(); stepFrame(k === 'ArrowLeft' ? -1 : 1); return; }
+  if (stage === 'result' && (k === 'r' || k === 'R')) { shoot(); return; }
+  if (stage === 'result' && (k === 's' || k === 'S')) { download(); return; }
 });
+addEventListener('pointerdown', touch);
 addEventListener('keyup', e => mouse.simKey(e, false));
 
 // ───────── 시작 ─────────
 $('strip-date').textContent = `GGF 2026 · ${today()}`;
 applyFrame();
 renderFrames();
-setStage('idle');
+setStage('intro');
 
 function checkServer() {
   serverOK = null;
