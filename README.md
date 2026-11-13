@@ -1,7 +1,17 @@
 # 디랩네컷 · GGF 2026
 
-micro:bit를 **에어 마우스**처럼 들고 기울여서 조작하는 네컷 포토부스 웹앱입니다.
-카메라 촬영 → 1200×3600 네컷 합성 → QR로 휴대폰 저장까지 한 화면에서 끝납니다.
+micro:bit 하나로 조작하는 네컷 포토부스 웹앱입니다.
+시작 → 프레임 → 촬영 → 완성 네 화면이 한 장씩 넘어가고, 1200×3600 네컷을 합성한 뒤 QR로 손님 휴대폰에 바로 저장합니다.
+
+## 바로 쓰기
+
+| 용도 | 주소 |
+|---|---|
+| 포토부스 (촬영 노트북의 Chrome/Edge) | https://ohmycoding1.github.io/dlab-4cut/ |
+| 사진 받기 페이지 (QR로 열림) | https://ohmycoding1.github.io/dlab-4cut/p.html?id=... |
+
+설치 없이 위 주소만 열면 됩니다. 처음 열 때 카메라 권한을 허용하고, ⚙ → **블루투스 연결**로 micro:bit를 붙입니다.
+`p.html`을 `?id=` 없이 열면 "사진 주소가 올바르지 않아요"가 나오는 게 정상입니다.
 
 ```
 micro:bit ──BLE──▶ 브라우저(Chrome/Edge) ──업로드──▶ 디랩레포트시스템 Firebase Storage ──QR──▶ 손님 휴대폰(p.html)
@@ -9,14 +19,16 @@ micro:bit ──BLE──▶ 브라우저(Chrome/Edge) ──업로드──▶ 
  흔들기·A+B = 촬영
 ```
 
-## 실행
+## 노트북에서 직접 띄우기 (선택)
+
+인터넷이 불안한 행사장 대비용입니다. 평소에는 위의 GitHub Pages 주소를 쓰면 됩니다.
 
 ```bash
 npm install
 npm start
 ```
 
-촬영 노트북의 Chrome/Edge에서 `http://localhost:3000`을 엽니다. 카메라와 Web Bluetooth는 `localhost` 또는 HTTPS에서만 동작합니다.
+촬영 노트북의 Chrome/Edge에서 `http://localhost:3000`을 엽니다. 카메라와 Web Bluetooth는 `localhost` 또는 HTTPS에서만 동작합니다. 이렇게 띄우면 노트북 사진 서버가 함께 켜져서, Firebase 업로드가 실패할 때 2순위 QR 전달로 쓰입니다.
 
 ## micro:bit 준비
 
@@ -72,18 +84,23 @@ micro:bit는 **A = 이전, B = 다음, 흔들기 또는 A+B 동시 = 촬영** �
 
 설정은 [`public/js/share-config.js`](public/js/share-config.js)에 있습니다(버킷, 폴더, 사진 받기 페이지 주소, 보관 일수 표시).
 
-**처음 한 번 해야 할 일 (디랩레포트시스템 쪽)**
+**설정 상태**
 
-- **Storage 규칙 배포:** `ohmycoding1/dlab-feedback`의 `storage.rules`에 `match /fourcuts/{file}` 규칙이 있어야 합니다. 로그인 없이 **새 파일 만들기만** 허용하고(24자 이름의 JPEG, 8MB 미만, 덮어쓰기·삭제 불가), 읽기는 **이름을 아는 단건만** 허용합니다(목록 조회 불가). 그 저장소 `main`에 들어가면 배포 워크플로가 Storage 규칙도 함께 배포합니다. 바로 배포하려면 그 저장소에서 `firebase deploy --only storage --project dlab-sc-feedback`.
-- **7일 뒤 자동 삭제:** 버킷 수명 주기 규칙으로 `fourcuts/`만 지웁니다. 아래 명령은 버킷의 기존 수명 주기 설정을 **덮어쓰므로**, 먼저 `gcloud storage buckets describe gs://dlab-sc-feedback.firebasestorage.app --format="default(lifecycle_config)"`로 기존 규칙이 없는지 확인하세요.
+| 항목 | 상태 |
+|---|---|
+| Storage 규칙 (`dlab-feedback`의 `storage.rules` → `match /fourcuts/{file}`) | ✅ 배포됨 (2026-11-13) |
+| 사진 받기 페이지 (GitHub Pages) | ✅ 배포됨 |
+| 7일 뒤 자동 삭제 (버킷 수명 주기 규칙) | ⬜ 아직 — 아래 명령으로 설정 |
+
+- **Storage 규칙:** 로그인 없이 **새 파일 만들기만** 허용합니다(24자 이름의 JPEG, 8MB 미만, 덮어쓰기·삭제 불가). 읽기는 **이름을 아는 단건만** 허용하고 목록 조회는 막습니다. 규칙 원본은 `ohmycoding1/dlab-feedback`이고, 그 저장소 `main`에 머지하면 배포 워크플로가 Storage 규칙도 함께 배포합니다.
+- **7일 뒤 자동 삭제:** 버킷 수명 주기 규칙으로 `fourcuts/`만 지웁니다. 아래 명령은 버킷의 기존 수명 주기 설정을 **덮어쓰므로**, 먼저 `gcloud storage buckets describe gs://dlab-sc-feedback.firebasestorage.app --format="default(lifecycle_config)"`로 기존 규칙이 없는지 확인하세요. 설정하기 전까지는 사진이 자동으로 지워지지 않습니다.
 
   ```bash
   echo '{"rule":[{"action":{"type":"Delete"},"condition":{"age":7,"matchesPrefix":["fourcuts/"]}}]}' > lifecycle.json
   gcloud storage buckets update gs://dlab-sc-feedback.firebasestorage.app --lifecycle-file=lifecycle.json
   ```
 
-- **사진 받기 페이지:** `p.html`은 이 저장소의 GitHub Pages로 배포되므로 이 변경이 `main`에 들어가야 QR이 열립니다.
-- 디랩레포트시스템에서 Storage에 **App Check 강제**를 켜 두었다면 로그인 없는 업로드가 막힙니다. 그때는 강제를 끄거나 2순위 사진 서버를 씁니다.
+- **업로드가 실패할 때:** 완성 화면에 "사진 전송에 실패했어요"와 오류 문구가 나옵니다. 디랩레포트시스템에서 Storage에 **App Check 강제**를 켜 두었다면 로그인 없는 업로드가 막히므로, 강제를 끄거나 2순위 사진 서버를 씁니다. 브라우저 콘솔에서 `__lastShareUrl`을 입력하면 마지막 QR 주소를 볼 수 있습니다.
 
 ### 2순위: 노트북 사진 서버 (같은 와이파이)
 
@@ -102,17 +119,20 @@ Firebase 업로드가 실패하면 `npm start`로 띄운 노트북 사진 서버
 | `UPLOADS_PER_MIN` | `20` | IP당 분당 업로드 제한 |
 | `CORS_ORIGIN` | (꺼짐) | 다른 주소의 화면(예: GitHub Pages)에서 업로드 허용. 쉼표로 여러 개 |
 
-## GitHub Pages로 쓰기
+## GitHub Pages 배포
 
-`main`에 푸시하면 `public/`이 **https://ohmycoding1.github.io/dlab-4cut/**에 배포됩니다(처음 한 번은 저장소 **Settings → Pages → Source**를 **GitHub Actions**로 바꿔야 합니다). 키오스크 화면(`index.html`)과 사진 받기 페이지(`p.html`)가 함께 배포됩니다.
+`main`에 `public/` 변경이 들어가면 **GitHub Pages 배포** 워크플로가 키오스크 화면(`index.html`)과 사진 받기 페이지(`p.html`)를 https://ohmycoding1.github.io/dlab-4cut/ 에 올립니다. Actions 탭에서 **Run workflow**로 수동 배포도 할 수 있습니다.
 
+- 저장소 설정(이미 완료): **Settings → Pages → Source = GitHub Actions**, **Settings → Environments → github-pages → Deployment branches**에 `main` 허용. 배포가 몇 초 만에 실패하면 이 두 곳부터 확인합니다.
 - Pages로 띄워도 촬영·micro:bit·합성·PC 저장, Firebase QR 전달까지 모두 됩니다(사진은 Firebase에 보관).
 - 노트북 사진 서버를 2순위로 함께 쓰려면 `https://ohmycoding1.github.io/dlab-4cut/?api=https://서버주소`(또는 ⚙ → 2순위 사진 서버)로 연결하고, 서버는 `CORS_ORIGIN=https://ohmycoding1.github.io`를 지정해 HTTPS로 띄웁니다.
 
 ## 행사 전 체크리스트
 
 - [ ] 25팀 기준 전체 흐름 리허설: 촬영 → QR → 휴대폰 저장
-- [ ] Storage 규칙 배포 후, 손님 휴대폰(와이파이·데이터 모두)으로 QR → 사진 저장까지 실제로 되는지 확인
+- [ ] 손님 휴대폰(와이파이·데이터 모두)으로 QR → 사진 저장까지 실제로 되는지 확인 (iPhone·Android 각 1대)
+- [ ] 실제 micro:bit로 흔들기·A+B가 잘 잡히는지 확인
+- [ ] 7일 자동 삭제(버킷 수명 주기 규칙) 설정
 - [ ] micro:bit 배터리 여분, 노트북과 3m 이내 거리 유지
 - [ ] 조명 / 카메라 선택(⚙ → 카메라) / 거울 모드 확인
 - [ ] ⚙ → 전체 화면으로 키오스크 모드 전환
@@ -121,12 +141,15 @@ Firebase 업로드가 실패하면 `npm start`로 띄운 노트북 사진 서버
 ## 구조
 
 ```
-server.js              업로드·QR·사진 페이지·자동 삭제
-public/index.html      화면
-public/css/app.css     디자인
-public/js/app.js       촬영 흐름·합성·업로드
-public/js/microbit.js  BLE 연결 + 에어 마우스 커서
-firmware/codal/        micro:bit V2 펌웨어(C++) — Actions가 hex로 빌드
-firmware/*.ts          같은 기능의 MakeCode 코드
-.github/workflows/     펌웨어 빌드 · Pages 배포
+public/index.html            키오스크 화면 (시작·프레임·촬영·완성 4장)
+public/p.html                사진 받기 페이지 (QR로 휴대폰에서 열림)
+public/css/app.css           디자인 · 화면 넘김 효과
+public/js/app.js             화면 흐름 · 촬영 · 합성 · 업로드 · QR
+public/js/microbit.js        BLE 연결 · 기울이기 커서 · A+B · 흔들기 감지
+public/js/share-config.js    Firebase 업로드 설정 (버킷 · 폴더 · 사진 받기 주소)
+public/js/vendor/qrcode.js   QR 생성 (qrcode-generator 1.4.4, MIT)
+server.js                    (선택) 노트북 사진 서버: 업로드 · QR · 사진 페이지 · 자동 삭제
+firmware/codal/              micro:bit V2 펌웨어(C++) — Actions가 hex로 빌드
+firmware/*.ts                같은 기능의 MakeCode 코드
+.github/workflows/           펌웨어 빌드 · Pages 배포
 ```
